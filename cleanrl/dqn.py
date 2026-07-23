@@ -8,12 +8,12 @@ import gymnasium as gym
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+import torch.nn.functional as F # DQN 需要 F.mse_loss
 import torch.optim as optim
 import tyro
 from torch.utils.tensorboard import SummaryWriter
 
-from cleanrl_utils.buffers import ReplayBuffer
+from cleanrl_utils.buffers import ReplayBuffer  # 经验回放缓冲区
 
 
 @dataclass
@@ -87,7 +87,7 @@ def make_env(env_id, seed, idx, capture_video, run_name):
     return thunk
 
 
-# ALGO LOGIC: initialize agent here:
+# ALGO LOGIC: initialize agent here: 只有一个 Q 网络
 class QNetwork(nn.Module):
     def __init__(self, env):
         super().__init__()
@@ -146,7 +146,7 @@ if __name__ == "__main__":
 
     q_network = QNetwork(envs).to(device)
     optimizer = optim.Adam(q_network.parameters(), lr=args.learning_rate)
-    target_network = QNetwork(envs).to(device)
+    target_network = QNetwork(envs).to(device)  # 用自己更新自己"导致震荡
     target_network.load_state_dict(q_network.state_dict())
 
     rb = ReplayBuffer(

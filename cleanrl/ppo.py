@@ -4,16 +4,16 @@ import random
 import time
 from dataclasses import dataclass
 
-import gymnasium as gym
+import gymnasium as gym  # RL环境库
 import numpy as np
-import torch
-import torch.nn as nn
+import torch  # 深度学习框架
+import torch.nn as nn  # 神经网络模块
 import torch.optim as optim
-import tyro
-from torch.distributions.categorical import Categorical
-from torch.utils.tensorboard import SummaryWriter
+import tyro  # 参数解析器
+from torch.distributions.categorical import Categorical  #离散动作采集
+from torch.utils.tensorboard import SummaryWriter  #TensorBoard 日志
 
-
+# 超参数配置
 @dataclass
 class Args:
     exp_name: str = os.path.basename(__file__)[: -len(".py")]
@@ -34,19 +34,19 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    env_id: str = "CartPole-v1"
+    env_id: str = "CartPole-v1"  # 默认环境
     """the id of the environment"""
-    total_timesteps: int = 500000
+    total_timesteps: int = 500000  # 总训练步数
     """total timesteps of the experiments"""
-    learning_rate: float = 2.5e-4
+    learning_rate: float = 2.5e-4  # 学习率
     """the learning rate of the optimizer"""
-    num_envs: int = 4
+    num_envs: int = 4  # 并行环境数量
     """the number of parallel game environments"""
-    num_steps: int = 128
+    num_steps: int = 128  # 每个环境的步数
     """the number of steps to run in each environment per policy rollout"""
-    anneal_lr: bool = True
+    anneal_lr: bool = True  
     """Toggle learning rate annealing for policy and value networks"""
-    gamma: float = 0.99
+    gamma: float = 0.99  # 折扣因子
     """the discount factor gamma"""
     gae_lambda: float = 0.95
     """the lambda for the general advantage estimation"""
@@ -77,42 +77,42 @@ class Args:
     num_iterations: int = 0
     """the number of iterations (computed in runtime)"""
 
-
+# 环境创建与网络初始化
 def make_env(env_id, idx, capture_video, run_name):
     def thunk():
         if capture_video and idx == 0:
             env = gym.make(env_id, render_mode="rgb_array")
             env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
         else:
-            env = gym.make(env_id)
-        env = gym.wrappers.RecordEpisodeStatistics(env)
+            env = gym.make(env_id)  # 创建环境
+        env = gym.wrappers.RecordEpisodeStatistics(env)  # 记录每个episode的统计信息
         return env
 
     return thunk
 
-
+# 正交初始化
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     torch.nn.init.orthogonal_(layer.weight, std)
     torch.nn.init.constant_(layer.bias, bias_const)
     return layer
 
-
+# Agent 网络
 class Agent(nn.Module):
     def __init__(self, envs):
         super().__init__()
-        self.critic = nn.Sequential(
+        self.critic = nn.Sequential(  # 价值网络
             layer_init(nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)),
             nn.Tanh(),
             layer_init(nn.Linear(64, 64)),
             nn.Tanh(),
-            layer_init(nn.Linear(64, 1), std=1.0),
+            layer_init(nn.Linear(64, 1), std=1.0),  # 输出一个标量值
         )
-        self.actor = nn.Sequential(
+        self.actor = nn.Sequential(  # 策略网络
             layer_init(nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)),
             nn.Tanh(),
             layer_init(nn.Linear(64, 64)),
             nn.Tanh(),
-            layer_init(nn.Linear(64, envs.single_action_space.n), std=0.01),
+            layer_init(nn.Linear(64, envs.single_action_space.n), std=0.01),  # 输出两个logits
         )
 
     def get_value(self, x):
@@ -120,12 +120,12 @@ class Agent(nn.Module):
 
     def get_action_and_value(self, x, action=None):
         logits = self.actor(x)
-        probs = Categorical(logits=logits)
+        probs = Categorical(logits=logits)  # 转化为概率分布
         if action is None:
             action = probs.sample()
         return action, probs.log_prob(action), probs.entropy(), self.critic(x)
 
-
+# 训练主函数
 if __name__ == "__main__":
     args = tyro.cli(Args)
     args.batch_size = int(args.num_envs * args.num_steps)
